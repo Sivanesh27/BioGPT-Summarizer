@@ -71,9 +71,14 @@ def generate_final_summary(full_text):
     tokenizer = get_tokenizer()
     model = get_model()
 
+    full_text = clean_text(full_text)
     sections = split_sections(full_text)
 
-    excluded_sections = {"Keywords", "References", "Footnotes", "Conflict of interest", "Acknowledgments", "Peer review", "Foundation Project"}
+    excluded_sections = {
+        "Keywords", "References", "Footnotes", "Conflict of interest",
+        "Acknowledgments", "Peer review", "Foundation Project",
+        "Notes Comments", "Background", "Funding", "Sources", "Support"
+    }
     sections = {k: v for k, v in sections.items() if k.strip() not in excluded_sections}
 
     full_summary = "### 📄 Paper Summary\n\n"
