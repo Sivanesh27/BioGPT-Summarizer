@@ -1,3 +1,4 @@
+# summariser.py
 from transformers import pipeline, AutoTokenizer
 import streamlit as st
 import re
@@ -10,76 +11,51 @@ def get_model():
 def get_tokenizer():
     return AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-def clean_text(text):
-    # Remove weird unicode artifacts, extra spaces
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
-    return text.strip()
+def split_sections(text):
+    headers = ["title", "background", "objective", "methods", "methodology", "study design", "participants", "results", "discussion", "interpretation", "conclusion"]
+    section_dict = {}
+    current_header = "title"
+    section_dict[current_header] = []
 
-def chunk_text(text, tokenizer, max_tokens=1024):
-    tokens = tokenizer(text, return_tensors="pt", truncation=False)["input_ids"][0]
-    chunks = []
-    for i in range(0, len(tokens), max_tokens):
-        chunk = tokens[i:i + max_tokens]
-        if len(chunk) > 10:  # Skip tiny junk chunks
-            chunks.append(tokenizer.decode(chunk, skip_special_tokens=True))
-    return chunks
+    for line in text.split("\n"):
+        line_clean = line.strip().lower()
+        if any(h in line_clean for h in headers):
+            current_header = next(h for h in headers if h in line_clean)
+            section_dict[current_header] = []
+        section_dict[current_header].append(line.strip())
 
-def summarize_text(text, summarizer):
+    return {k: " ".join(v) for k, v in section_dict.items() if v}
+
+def summarize_chunk(text, model, max_len=512):
     try:
-        if len(text.strip()) < 30:
-            return ""
-        return summarizer(text, max_length=250, min_length=60, do_sample=False)[0]["summary_text"]
+        return model(text, max_length=300, min_length=100, do_sample=False)[0]['summary_text']
     except Exception as e:
         return f"[Error summarizing section: {e}]"
 
-def split_sections(text):
-    section_pattern = re.compile(r'^\s*(abstract|introduction|background|methods?|materials?|results?|discussion|conclusion|references?)\s*$', re.I)
-    sections = {}
-    current_section = "Full Text"
-    sections[current_section] = []
-
-    for line in text.splitlines():
-        if section_pattern.match(line.strip()):
-            current_section = line.strip().title()
-            sections[current_section] = []
-        else:
-            sections[current_section].append(line.strip())
-
-    return {
-        k: clean_text(" ".join(v)) for k, v in sections.items()
-        if len(" ".join(v)) > 100
-    }
-
-def format_structured_summary(sections):
-    output = "✅ **Detailed Summary**\n\n"
-    for title, summary in sections.items():
-        if summary and "Error summarizing" not in summary:
-            output += f"### {title}\n{summary.strip()}\n\n"
-    return output.strip()
-
 def generate_final_summary(full_text):
     tokenizer = get_tokenizer()
-    summarizer = get_model()
-    full_text = clean_text(full_text)
+    model = get_model()
+
     sections = split_sections(full_text)
-
-    if not sections:
-        st.warning("⚠️ No clear sections detected. Summarizing full document...")
-        chunks = chunk_text(full_text, tokenizer)
-        summaries = [summarize_text(chunk, summarizer) for chunk in chunks]
-        combined = " ".join([s for s in summaries if s])
-        return format_structured_summary({"Full Summary": combined})
-
-    summary_results = {}
+    full_summary = ""
     progress = st.progress(0)
-    for i, (title, content) in enumerate(sections.items()):
-        chunks = chunk_text(content, tokenizer)
-        summaries = [summarize_text(chunk, summarizer) for chunk in chunks]
-        joined_summary = " ".join([s for s in summaries if s])
-        summary_results[title] = joined_summary
-        progress.progress((i + 1) / len(sections))
-    progress.empty()
 
-    return format_structured_summary(summary_results)
+    for i, (title, content) in enumerate(sections.items()):
+        if not content.strip():
+            continue
+
+        tokens = tokenizer(content, return_tensors="pt", truncation=False)["input_ids"][0]
+        if len(tokens) > 1024:
+            chunks = [tokens[j:j+900] for j in range(0, len(tokens), 900)]
+            chunk_texts = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
+            chunk_summaries = [summarize_chunk(chunk, model) for chunk in chunk_texts]
+            summary_text = " ".join(chunk_summaries)
+        else:
+            summary_text = summarize_chunk(content, model)
+
+        full_summary += f"\n**{title.capitalize()}**\n{summary_text}\n"
+        progress.progress((i + 1) / len(sections))
+
+    progress.empty()
+    return full_summary.strip()
 
