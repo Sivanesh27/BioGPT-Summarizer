@@ -10,51 +10,62 @@ def get_model():
 def get_tokenizer():
     return AutoTokenizer.from_pretrained("sshleifer/distilbart-cnn-12-6")
 
-def chunk_text(text, tokenizer, max_tokens=1000):
-    tokens = tokenizer(text, return_tensors="pt", truncation=False)["input_ids"][0]
-    chunks = []
-    for i in range(0, len(tokens), max_tokens):
-        chunk = tokens[i:i + max_tokens]
-        chunk_text = tokenizer.decode(chunk, skip_special_tokens=True)
-        chunks.append(chunk_text)
-    return chunks
+def split_by_sections(text):
+    """Naive section splitter for scientific papers"""
+    section_titles = [
+        "abstract", "background", "introduction", "methods", "materials and methods",
+        "results", "discussion", "conclusion"
+    ]
+    sections = {}
+    current = "preamble"
+    sections[current] = []
 
-def clean_text(text):
-    # Remove duplicate sentences and unnecessary whitespace
-    sentences = list(set(re.split(r'(?<=[.!?]) +', text)))
-    sentences = [s.strip().capitalize() for s in sentences if len(s.split()) > 6]
-    return " ".join(sentences)
+    for line in text.splitlines():
+        clean_line = line.strip().lower()
+        if clean_line in section_titles:
+            current = clean_line
+            sections[current] = []
+        else:
+            sections.setdefault(current, []).append(line.strip())
 
-def postprocess_summary(raw_summary):
-    text = clean_text(raw_summary)
-    # Capitalize first letter and fix spacing
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+    return {k: "\n".join(v).strip() for k, v in sections.items() if v and len(" ".join(v)) > 100}
+
+def summarize_section(title, content, model):
+    try:
+        result = model(content, max_length=200, min_length=60, do_sample=False)
+        summary = result[0]["summary_text"]
+        return f"### {title.capitalize()}\n{summary.strip()}\n"
+    except Exception as e:
+        return f"### {title.capitalize()}\n[Error summarizing this section: {e}]\n"
 
 def generate_final_summary(text):
-    summarizer = get_model()
     tokenizer = get_tokenizer()
-    chunks = chunk_text(text, tokenizer)
+    summarizer = get_model()
+    sections = split_by_sections(text)
 
-    summaries = []
+    structured_summary = ""
+    total = len(sections)
     progress = st.progress(0)
 
-    for i, chunk in enumerate(chunks):
-        try:
-            result = summarizer(chunk, max_length=160, min_length=40, do_sample=False)
-            summaries.append(result[0]["summary_text"])
-        except Exception as e:
-            summaries.append("[Skipped faulty chunk]")
-            st.warning(f"⚠️ Error summarizing chunk {i+1}: {e}")
-        progress.progress((i + 1) / len(chunks))
-    progress.empty()
+    for i, (section_title, section_content) in enumerate(sections.items()):
+        # Token-aware chunking for long sections
+        tokens = tokenizer(section_content, return_tensors="pt", truncation=False)["input_ids"][0]
+        if len(tokens) > 1024:
+            chunks = [tokens[j:j+900] for j in range(0, len(tokens), 900)]
+            chunk_texts = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
+            combined_summary = " ".join(
+                summarizer(c, max_length=160, min_length=40, do_sample=False)[0]["summary_text"]
+                for c in chunk_texts
+            )
+            summary = summarize_section(section_title, combined_summary, summarizer)
+        else:
+            summary = summarize_section(section_title, section_content, summarizer)
 
-    # Meta-summary to improve cohesion
-    combined_summary = " ".join(summaries)
-    try:
-        final = summarizer(combined_summary, max_length=200, min_length=60, do_sample=False)
-        return postprocess_summary(final[0]["summary_text"])
-    except Exception as e:
-        st.warning("⚠️ Meta-summary failed. Showing combined summary instead.")
-        return postprocess_summary(combined_summary)
+        structured_summary += summary + "\n"
+        progress.progress((i + 1) / total)
+
+    progress.empty()
+    return structured_summary.strip()
+st.caption("⚠️ This structured summary is generated using AI and may omit technical details. Always verify with the full paper before citing.")
+
 
