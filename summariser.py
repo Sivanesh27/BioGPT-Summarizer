@@ -1,5 +1,6 @@
 from transformers import pipeline, AutoTokenizer
 import streamlit as st
+import re
 
 @st.cache_resource(show_spinner=False)
 def get_model():
@@ -9,25 +10,31 @@ def get_model():
 def get_tokenizer():
     return AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
+def clean_text(text):
+    # Remove weird unicode artifacts, extra spaces
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    return text.strip()
+
 def chunk_text(text, tokenizer, max_tokens=1024):
-    inputs = tokenizer(text, return_tensors="pt", truncation=False)["input_ids"][0]
-    if len(inputs) <= max_tokens:
-        return [text]
-    chunks = [inputs[i:i+max_tokens] for i in range(0, len(inputs), max_tokens)]
-    return [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
+    tokens = tokenizer(text, return_tensors="pt", truncation=False)["input_ids"][0]
+    chunks = []
+    for i in range(0, len(tokens), max_tokens):
+        chunk = tokens[i:i + max_tokens]
+        if len(chunk) > 10:  # Skip tiny junk chunks
+            chunks.append(tokenizer.decode(chunk, skip_special_tokens=True))
+    return chunks
 
 def summarize_text(text, summarizer):
     try:
-        if not text.strip():
-            return "[Skipped empty section]"
+        if len(text.strip()) < 30:
+            return ""
         return summarizer(text, max_length=250, min_length=60, do_sample=False)[0]["summary_text"]
     except Exception as e:
         return f"[Error summarizing section: {e}]"
 
 def split_sections(text):
-    # Improved section detection (case insensitive, flexible spacing)
-    import re
-    section_pattern = re.compile(r'^\s*(abstract|introduction|background|methods?|results?|discussion|conclusion|references?)\s*$', re.I)
+    section_pattern = re.compile(r'^\s*(abstract|introduction|background|methods?|materials?|results?|discussion|conclusion|references?)\s*$', re.I)
     sections = {}
     current_section = "Full Text"
     sections[current_section] = []
@@ -39,40 +46,40 @@ def split_sections(text):
         else:
             sections[current_section].append(line.strip())
 
-    # Filter short content sections
     return {
-        k: "\n".join(v).strip() for k, v in sections.items()
+        k: clean_text(" ".join(v)) for k, v in sections.items()
         if len(" ".join(v)) > 100
     }
 
 def format_structured_summary(sections):
     output = "✅ **Detailed Summary**\n\n"
     for title, summary in sections.items():
-        output += f"### {title}\n{summary.strip()}\n\n"
+        if summary and "Error summarizing" not in summary:
+            output += f"### {title}\n{summary.strip()}\n\n"
     return output.strip()
 
 def generate_final_summary(full_text):
     tokenizer = get_tokenizer()
     summarizer = get_model()
+    full_text = clean_text(full_text)
     sections = split_sections(full_text)
 
-    # If no sections detected or all are too short, summarize the full text
     if not sections:
         st.warning("⚠️ No clear sections detected. Summarizing full document...")
         chunks = chunk_text(full_text, tokenizer)
-        summary = "\n\n".join(summarize_text(chunk, summarizer) for chunk in chunks if chunk.strip())
-        return format_structured_summary({"Full Summary": summary})
+        summaries = [summarize_text(chunk, summarizer) for chunk in chunks]
+        combined = " ".join([s for s in summaries if s])
+        return format_structured_summary({"Full Summary": combined})
 
-    # Summarize section by section
     summary_results = {}
     progress = st.progress(0)
-    total = len(sections)
-
     for i, (title, content) in enumerate(sections.items()):
-        chunked = chunk_text(content, tokenizer)
-        summaries = [summarize_text(chunk, summarizer) for chunk in chunked if chunk.strip()]
-        summary_results[title] = " ".join(summaries)
-        progress.progress((i + 1) / total)
-
+        chunks = chunk_text(content, tokenizer)
+        summaries = [summarize_text(chunk, summarizer) for chunk in chunks]
+        joined_summary = " ".join([s for s in summaries if s])
+        summary_results[title] = joined_summary
+        progress.progress((i + 1) / len(sections))
     progress.empty()
+
     return format_structured_summary(summary_results)
+
