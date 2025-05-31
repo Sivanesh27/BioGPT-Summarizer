@@ -10,10 +10,17 @@ def get_tokenizer():
     return AutoTokenizer.from_pretrained("sshleifer/distilbart-cnn-12-6")
 
 def split_by_sections(text):
-    """Naive section splitter for scientific papers"""
+    """Split paper into main scientific sections with rough matching."""
     section_titles = [
-        "abstract", "background", "introduction", "methods", "materials and methods",
-        "results", "discussion", "conclusion"
+        "abstract",
+        "background",
+        "introduction",
+        "methods",
+        "materials and methods",
+        "results",
+        "discussion",
+        "conclusion",
+        "conclusions",
     ]
     sections = {}
     current = "preamble"
@@ -27,62 +34,78 @@ def split_by_sections(text):
         else:
             sections.setdefault(current, []).append(line.strip())
 
-    return {k: "\n".join(v).strip() for k, v in sections.items() if v and len(" ".join(v)) > 100}
+    # Filter sections: keep only those with significant text
+    return {
+        k: "\n".join(v).strip()
+        for k, v in sections.items()
+        if v and len(" ".join(v)) > 100
+    }
+
+def summarize_section(title, content, model, tokenizer):
+    # Truncate content to max 1000 tokens to speed up summarization
+    tokens = tokenizer(content, return_tensors="pt", truncation=True, max_length=1000)[
+        "input_ids"
+    ][0]
+    truncated_text = tokenizer.decode(tokens, skip_special_tokens=True)
+
+    # Use shorter summary lengths to speed up generation
+    try:
+        result = model(
+            truncated_text,
+            max_length=120,
+            min_length=40,
+            do_sample=False,
+            truncation=True,
+        )
+        summary = result[0]["summary_text"]
+        return f"**{title.capitalize()}:**\n{summary.strip()}\n"
+    except Exception as e:
+        return f"**{title.capitalize()}:**\n[Error summarizing this section: {e}]\n"
 
 def generate_final_summary(text):
     tokenizer = get_tokenizer()
     summarizer = get_model()
     sections = split_by_sections(text)
 
-    # Try to extract title: first non-empty line
+    # Extract title as the first non-empty line in the text (usually paper title)
     title = ""
     for line in text.splitlines():
         if line.strip():
             title = line.strip()
             break
 
-    structured_summary = "✅ Detailed Summary\n"
-    structured_summary += f"Title:\n{title}\n\n"
+    # Define the sections we want to summarize in detail
+    important_sections = [
+        "abstract",
+        "introduction",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+        "background",
+        "materials and methods",
+        "conclusions",
+    ]
 
-    # Map original sections to nicer headings
-    section_name_map = {
-        "abstract": "Background",
-        "background": "Background",
-        "introduction": "Background",
-        "methods": "Study Design and Methodology",
-        "materials and methods": "Study Design and Methodology",
-        "results": "Key Results",
-        "discussion": "Interpretation",
-        "conclusion": "Conclusion",
-    }
+    summary_text = f"# {title}\n\n"
 
-    total = len(sections)
     progress = st.progress(0)
+    total = len(important_sections)
 
-    for i, (section_title, section_content) in enumerate(sections.items()):
-        display_title = section_name_map.get(section_title, section_title.capitalize())
-
-        tokens = tokenizer(section_content, return_tensors="pt", truncation=False)["input_ids"][0]
-        if len(tokens) > 1024:
-            # chunk and summarize each chunk, then combine
-            chunks = [tokens[j:j+900] for j in range(0, len(tokens), 900)]
-            chunk_texts = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
-            combined_summary = " ".join(
-                summarizer(c, max_length=160, min_length=40, do_sample=False)[0]["summary_text"]
-                for c in chunk_texts
-            )
-            summary = combined_summary.strip()
-        else:
-            summary = summarizer(section_content, max_length=200, min_length=60, do_sample=False)[0]["summary_text"].strip()
-
-        structured_summary += f"{display_title}:\n{summary}\n\n"
+    for i, section in enumerate(important_sections):
+        content = sections.get(section)
+        if content:
+            sec_summary = summarize_section(section, content, summarizer, tokenizer)
+            summary_text += sec_summary + "\n"
         progress.progress((i + 1) / total)
 
     progress.empty()
-    return structured_summary.strip()
 
-st.caption("⚠️ This structured summary is generated using AI and may omit technical details. Always verify with the full paper before citing.")
+    summary_text += (
+        "⚠️ *This structured summary is AI-generated. Verify with the full paper before citing.*"
+    )
 
-st.caption("⚠️ This structured summary is generated using AI and may omit technical details. Always verify with the full paper before citing.")
+    return summary_text.strip()
+
 
 
