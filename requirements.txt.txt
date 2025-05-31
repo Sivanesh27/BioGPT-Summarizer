@@ -1,5 +1,5 @@
 streamlit
-pymupdf==1.23.7
+pdfplumber
 requests
 transformers
 torch
