@@ -16,36 +16,27 @@ def clean_text(text):
 
 def split_sections(text):
     """
-    Split the full text into sections based on typical research paper headers.
-    Returns a dictionary: {Section Title: Section Text}
+    Improved regex to split on lines that look like headers.
+    Headers can be uppercase or capitalized, followed by optional colon or newline.
     """
-    # Common headers (can add more as needed)
-    headers = [
-        "title", "abstract", "background", "objective", "objectives",
-        "methods", "methodology", "study design", "participants",
-        "results", "discussion", "interpretation", "conclusion", "references"
-    ]
-    pattern = re.compile(r'^\s*(%s)\s*[:\n]' % '|'.join(headers), re.IGNORECASE | re.MULTILINE)
+    # Use a regex pattern to detect section headers robustly
+    pattern = re.compile(
+        r'^\s*([A-Z][A-Za-z\s]{2,50})(?:\n|\r|\r\n|:)', re.MULTILINE
+    )
 
     matches = list(pattern.finditer(text))
     sections = {}
 
     if not matches:
-        # If no headers found, put all in one section
         return {"Full Text": clean_text(text)}
 
     for i, match in enumerate(matches):
-        header = match.group(1).capitalize()
+        header = match.group(1).strip()
         start = match.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         section_text = text[start:end].strip()
         if section_text:
             sections[header] = clean_text(section_text)
-
-    # Debug print - comment out in production
-    # print(f"Detected sections: {list(sections.keys())}")
-    # for sec, cont in sections.items():
-    #     print(f"Section: {sec}, Length: {len(cont)} chars")
 
     return sections
 
@@ -54,7 +45,7 @@ def summarize_chunk(text, model):
         return "[Skipped empty or too short chunk]"
 
     try:
-        # Limit input length to 1024 tokens approx by word count (~750 words)
+        # Limit input length approx to 750 words (~token safe)
         words = text.split()
         if len(words) > 750:
             text = " ".join(words[:750])
@@ -76,11 +67,12 @@ def generate_final_summary(full_text):
 
     for i, (section, content) in enumerate(sections.items()):
         if not content or len(content) < 50:
-            # Skip empty or very short sections
+            full_summary += f"**{section}**\n\n[Skipped empty or too short section]\n\n"
+            progress.progress((i + 1) / n_sections)
             continue
 
         words = content.split()
-        chunk_size = 700  # safe chunk size to avoid token overflow
+        chunk_size = 700
         summaries = []
 
         for j in range(0, len(words), chunk_size):
