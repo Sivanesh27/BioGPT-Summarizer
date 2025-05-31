@@ -4,9 +4,10 @@ import requests
 from io import BytesIO
 from summariser import generate_final_summary
 
+# Must be the very first Streamlit command!
 st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
-st.title("🧠 BioGPT: Free Research Paper Summarizer")
 
+st.title("🧠 BioGPT: Free Research Paper Summarizer")
 st.markdown("Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!")
 
 uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
@@ -43,7 +44,6 @@ elif url and url.endswith(".pdf"):
 elif url and not url.endswith(".pdf"):
     st.warning("⚠️ Please provide a direct PDF link (ends with .pdf).")
 
-# Display and summarize
 if full_text.strip():
     if len(full_text.strip()) < 1000:
         st.warning("⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting.")
@@ -54,8 +54,8 @@ if full_text.strip():
     if st.button("🧠 Summarize"):
         with st.spinner("Generating summary..."):
             summary = generate_final_summary(full_text)
-            st.subheader("✅ Summary")
-            st.markdown(summary)
+            st.subheader("✅ Detailed Summary")
+            st.text_area("", summary, height=600)
             st.caption("⚠️ This is an AI-generated summary. Please verify with the original article before citing.")
 else:
     st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
