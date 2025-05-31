@@ -11,10 +11,9 @@ def get_tokenizer():
     return AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
 def clean_text(text):
-    # Remove excessive whitespace, newlines, and broken links
     text = re.sub(r'\n+', '\n', text)
-    text = re.sub(r'http\S+|www\.\S+', '', text)  # Remove URLs
-    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    text = re.sub(r'http\S+|www\.\S+', '', text) 
+    text = re.sub(r'\s+', ' ', text) 
     return text.strip()
 
 def split_sections(text):
@@ -56,7 +55,6 @@ def summarize_chunk(text, model):
         return f"[Error summarizing section: {str(e)}]"
 
 def remove_duplicates(text):
-    # Remove repeated lines or phrases
     lines = text.split('. ')
     seen = set()
     unique_lines = []
