@@ -1,15 +1,19 @@
-
-import openai
-
+from transformers import pipeline
 import streamlit as st
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+@st.cache_resource
+def get_summarizer():
+    return pipeline("summarization", model="facebook/bart-large-cnn")
 
 def summarize_text(text):
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # or "gpt-3.5-turbo" for cheaper
-        messages=[
-            {"role": "system", "content": "Summarize this biomedical research paper in clear, plain English."},
-            {"role": "user", "content": text}
-        ]
-    )
-    return response['choices'][0]['message']['content']
+    summarizer = get_summarizer()
+
+    max_chunk = 1000
+    text_chunks = [text[i:i+max_chunk] for i in range(0, len(text), max_chunk)]
+
+    summary = ""
+    for chunk in text_chunks:
+        result = summarizer(chunk, max_length=130, min_length=30, do_sample=False)
+        summary += result[0]['summary_text'] + " "
+    return summary.strip()
+
