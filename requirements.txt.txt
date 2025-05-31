@@ -1,5 +1,0 @@
-streamlit
-pdfplumber
-requests
-transformers
-torch
