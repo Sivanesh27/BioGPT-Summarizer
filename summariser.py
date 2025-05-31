@@ -54,7 +54,6 @@ def generate_final_summary(text):
         "results": "Key Results",
         "discussion": "Interpretation",
         "conclusion": "Conclusion",
-        # You can add "objective" or others if needed
     }
 
     total = len(sections)
@@ -81,6 +80,8 @@ def generate_final_summary(text):
 
     progress.empty()
     return structured_summary.strip()
+
+st.caption("⚠️ This structured summary is generated using AI and may omit technical details. Always verify with the full paper before citing.")
 
 st.caption("⚠️ This structured summary is generated using AI and may omit technical details. Always verify with the full paper before citing.")
 
