@@ -1,24 +1,22 @@
 import streamlit as st
-
-# Must be the first Streamlit command!
-st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
-
 import pdfplumber
 import requests
 from io import BytesIO
-
-# Import this after set_page_config to avoid the error
 from summariser import generate_final_summary
 
-st.title("🧠 BioGPT: Free Research Paper Summarizer")
-st.markdown("Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!")
+# IMPORTANT: set_page_config must be the very first Streamlit command
+st.set_page_config(page_title="BioGPT Fast Summarizer", page_icon="🧠")
+
+st.title("🧠 BioGPT: Fast Research Paper Summarizer")
+st.markdown(
+    "Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!"
+)
 
 uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
 url = st.text_input("🌐 Or paste a direct .pdf URL (e.g., from bioRxiv)")
 
 full_text = ""
 
-# Read from uploaded file
 if uploaded_file:
     try:
         with pdfplumber.open(BytesIO(uploaded_file.read())) as pdf:
@@ -29,7 +27,6 @@ if uploaded_file:
     except Exception as e:
         st.error(f"❌ Failed to read PDF: {e}")
 
-# Read from URL
 elif url and url.endswith(".pdf"):
     try:
         response = requests.get(url)
@@ -49,16 +46,20 @@ elif url and not url.endswith(".pdf"):
 
 if full_text.strip():
     if len(full_text.strip()) < 1000:
-        st.warning("⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting.")
+        st.warning(
+            "⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting."
+        )
 
     st.subheader("📑 Extracted Text Preview")
     st.text_area("First part of the paper:", full_text[:2000], height=300)
 
     if st.button("🧠 Summarize"):
-        with st.spinner("Generating summary..."):
+        with st.spinner("Generating summary... This may take a few seconds."):
             summary = generate_final_summary(full_text)
             st.subheader("✅ Detailed Summary")
-            st.text_area("", summary, height=600)
-            st.caption("⚠️ This is an AI-generated summary. Please verify with the original article before citing.")
+            st.markdown(summary)
+            st.caption(
+                "⚠️ This is an AI-generated summary. Please verify with the original article before citing."
+            )
 else:
     st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
