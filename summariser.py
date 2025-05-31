@@ -16,18 +16,15 @@ def clean_text(text):
 
 def split_sections(text):
     """
-    Improved regex to split on lines that look like headers.
-    Headers can be uppercase or capitalized, followed by optional colon or newline.
+    Split text into sections using headers. Headers are assumed to be lines that are:
+    - Capitalized or uppercase
+    - Followed by optional colon or newline
     """
-    pattern = re.compile(
-        r'^\s*([A-Z][A-Za-z\s]{2,50})(?=\s*$|\n|:)', re.MULTILINE
-    )
-
+    pattern = re.compile(r'^\s*([A-Z][A-Za-z\s]{2,50})(?=\s*$|\n|:)', re.MULTILINE)
     matches = list(pattern.finditer(text))
     sections = {}
 
     if not matches:
-        # No headers detected, return whole text as one section
         return {"Full Text": clean_text(text)}
 
     for i, match in enumerate(matches):
@@ -38,7 +35,6 @@ def split_sections(text):
         if section_text:
             sections[header] = clean_text(section_text)
 
-    # If no sections found (very rare), fallback
     if not sections:
         return {"Full Text": clean_text(text)}
 
@@ -63,7 +59,7 @@ def generate_final_summary(full_text):
     model = get_model()
 
     sections = split_sections(full_text)
-    full_summary = f"### Paper Summary\n\n"
+    full_summary = "### Paper Summary\n\n"
 
     progress = st.progress(0)
     n_sections = len(sections)
@@ -80,7 +76,6 @@ def generate_final_summary(full_text):
 
         for j in range(0, len(words), chunk_size):
             chunk = " ".join(words[j:j + chunk_size])
-            # Skip too short chunks to avoid errors
             if len(chunk.strip()) < 20:
                 continue
             summary = summarize_chunk(chunk, model)
