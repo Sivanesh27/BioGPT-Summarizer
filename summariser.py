@@ -2,7 +2,8 @@ import streamlit as st
 import pdfplumber
 import requests
 from io import BytesIO
-from summariser import generate_final_summary
+from transformers import pipeline, AutoTokenizer
+import streamlit as st
 
 st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
 
