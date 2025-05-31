@@ -11,13 +11,16 @@ def get_tokenizer():
     return AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
 def clean_text(text):
-    return re.sub(r'\n+', '\n', text).strip()
+    # Remove excessive whitespace, newlines, and broken links
+    text = re.sub(r'\n+', '\n', text)
+    text = re.sub(r'http\S+|www\.\S+', '', text)  # Remove URLs
+    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    return text.strip()
 
 def split_sections(text):
     """
-    Split text into sections using headers. Headers are assumed to be lines that are:
-    - Capitalized or uppercase
-    - Followed by optional colon or newline
+    Split text into sections using likely headers.
+    Headers are lines with initial capitalization or all-caps followed by a colon or newline.
     """
     pattern = re.compile(r'^\s*([A-Z][A-Za-z\s]{2,50})(?=\s*$|\n|:)', re.MULTILINE)
     matches = list(pattern.finditer(text))
@@ -52,16 +55,30 @@ def summarize_chunk(text, model):
     except Exception as e:
         return f"[Error summarizing section: {str(e)}]"
 
+def remove_duplicates(text):
+    # Remove repeated lines or phrases
+    lines = text.split('. ')
+    seen = set()
+    unique_lines = []
+    for line in lines:
+        line_clean = line.strip().lower()
+        if line_clean and line_clean not in seen:
+            seen.add(line_clean)
+            unique_lines.append(line.strip())
+    return '. '.join(unique_lines)
+
 def generate_final_summary(full_text):
     tokenizer = get_tokenizer()
     model = get_model()
 
     sections = split_sections(full_text)
 
-    excluded_sections = {"Keywords", "References", "Footnotes", "Conflict of interest statement"}
+    excluded_sections = {"Keywords", "References", "Footnotes", "Conflict of interest", "Acknowledgments", "Peer review", "Foundation Project"}
     sections = {k: v for k, v in sections.items() if k.strip() not in excluded_sections}
 
-    full_summary = "### Paper Summary\n\n"
+    full_summary = "### 📄 Paper Summary\n\n"
+    short_summary_parts = []
+
     progress = st.progress(0)
     n_sections = len(sections)
 
@@ -83,11 +100,21 @@ def generate_final_summary(full_text):
             summaries.append(summary)
 
         combined_summary = " ".join(summaries).strip()
+        combined_summary = remove_duplicates(combined_summary)
+
         if not combined_summary:
             combined_summary = "[No summary could be generated for this section]"
 
         full_summary += f"**{section}**\n\n{combined_summary}\n\n"
+        short_summary_parts.append(combined_summary)
+
         progress.progress((i + 1) / n_sections)
 
     progress.empty()
-    return full_summary.strip()
+
+    # Short abstract-like summary at the top
+    short_summary = summarize_chunk(" ".join(short_summary_parts), model)
+    short_summary = remove_duplicates(short_summary)
+
+    return f"### 🧠 Concise Summary\n\n{short_summary}\n\n---\n\n" + full_summary.strip()
+
