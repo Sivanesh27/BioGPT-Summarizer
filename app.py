@@ -8,7 +8,7 @@ st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
 
 st.title("🧠 BioGPT: Free Research Paper Summarizer")
 st.markdown(
-    "Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!"
+    "Upload a PDF or paste a direct .pdf link to summarize a research paper — no API key needed!"
 )
 
 uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
