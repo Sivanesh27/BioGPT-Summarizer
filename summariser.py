@@ -1,64 +1,67 @@
-import streamlit as st
-import pdfplumber
-import requests
-from io import BytesIO
 from transformers import pipeline, AutoTokenizer
 import streamlit as st
 
-st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
+@st.cache_resource(show_spinner=False)
+def get_model():
+    return pipeline("summarization", model="facebook/bart-large-cnn")
 
-st.title("🧠 BioGPT: Free Research Paper Summarizer")
-st.markdown("Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!")
+@st.cache_resource(show_spinner=False)
+def get_tokenizer():
+    return AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
-url = st.text_input("🌐 Or paste a direct .pdf URL (e.g., from bioRxiv)")
+def chunk_text(text, tokenizer, max_tokens=1024):
+    inputs = tokenizer(text, return_tensors="pt", truncation=False)["input_ids"][0]
+    chunks = [inputs[i:i+max_tokens] for i in range(0, len(inputs), max_tokens)]
+    return [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
 
-full_text = ""
+def format_structured_summary(sections):
+    output = "✅ **Detailed Summary**\n\n"
+    for title, summary in sections.items():
+        output += f"### {title}\n{summary.strip()}\n\n"
+    return output.strip()
 
-# Read from uploaded file
-if uploaded_file:
-    try:
-        with pdfplumber.open(BytesIO(uploaded_file.read())) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    full_text += text + "\n"
-    except Exception as e:
-        st.error(f"❌ Failed to read PDF: {e}")
+def split_sections(text):
+    titles = [
+        "title", "abstract", "background", "introduction", "methods",
+        "materials and methods", "results", "discussion", "conclusion", "references"
+    ]
+    sections = {}
+    current = "Title"
+    sections[current] = []
 
-# Read from URL
-elif url and url.endswith(".pdf"):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            with pdfplumber.open(BytesIO(response.content)) as pdf:
-                for page in pdf.pages:
-                    text = page.extract_text()
-                    if text:
-                        full_text += text + "\n"
+    for line in text.splitlines():
+        clean = line.strip()
+        if clean.lower() in titles:
+            current = clean.capitalize()
+            sections[current] = []
         else:
-            st.error("❌ Failed to download PDF. Check the URL.")
+            sections.setdefault(current, []).append(clean)
+
+    return {k: "\n".join(v).strip() for k, v in sections.items() if len(" ".join(v)) > 100}
+
+def summarize_text(text, summarizer):
+    try:
+        return summarizer(text, max_length=250, min_length=60, do_sample=False)[0]["summary_text"]
     except Exception as e:
-        st.error(f"❌ Error downloading PDF: {e}")
+        return f"[Error summarizing section: {e}]"
 
-elif url and not url.endswith(".pdf"):
-    st.warning("⚠️ Please provide a direct PDF link (ends with .pdf).")
+def generate_final_summary(full_text):
+    tokenizer = get_tokenizer()
+    summarizer = get_model()
+    sections = split_sections(full_text)
 
-if full_text.strip():
-    if len(full_text.strip()) < 1000:
-        st.warning("⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting.")
+    summary_results = {}
+    progress = st.progress(0)
+    total = len(sections)
 
-    st.subheader("📑 Extracted Text Preview")
-    st.text_area("First part of the paper:", full_text[:2000], height=300)
+    for i, (title, content) in enumerate(sections.items()):
+        chunked = chunk_text(content, tokenizer)
+        combined = " ".join(summarize_text(chunk, summarizer) for chunk in chunked)
+        summary_results[title] = combined
+        progress.progress((i + 1) / total)
 
-    if st.button("🧠 Summarize"):
-        with st.spinner("Generating summary..."):
-            summary = generate_final_summary(full_text)
-            st.subheader("✅ Detailed Summary")
-            st.markdown(summary)
-            st.caption("⚠️ This is an AI-generated summary. Please verify with the original article before citing.")
-else:
-    st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
+    progress.empty()
+    return format_structured_summary(summary_results)
 
 
 
