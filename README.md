@@ -1,4 +1,4 @@
-# 🧠 BioGPT: Research Paper Summarizer
+# BioGPT: Research Paper Summarizer
 
 > A free and open-source research paper summarizer built with Hugging Face Transformers and Streamlit — No API keys required!
 
@@ -13,28 +13,28 @@ Unlike typical summarizers that just chop up the full text, BioGPT:
 - Removes duplicates & clutter,
 - And outputs highly readable, concise text.
 
-✅ Ideal for researchers, students, and professionals who want to **grasp papers faster**.
+Ideal for researchers, students, and professionals who want to **grasp papers faster**.
 
 ---
 
-## 🎯 Key Features
+##  Key Features
 
-- 📄 **Upload PDFs** or paste `.pdf` **URLs** (bioRxiv, medRxiv, etc.)
-- 🧠 **Hugging Face summarization** using `facebook/bart-large-cnn`
-- 🧪 Section-wise extraction: `Abstract`, `Introduction`, `Results`, etc.
-- 🧹 Duplicate removal and text cleanup
-- 🌐 Deployed using **Streamlit Cloud**
-- 🆓 Fully free — No API keys or signup needed!
+- **Upload PDFs** or paste `.pdf` **URLs** (bioRxiv, medRxiv, etc.)
+- **Hugging Face summarization** using `facebook/bart-large-cnn`
+- Section-wise extraction: `Abstract`, `Introduction`, `Results`, etc.
+- Duplicate removal and text cleanup
+- Deployed using **Streamlit Cloud**
+- Fully free — No API keys or signup needed!
 
 ---
 
-## 🚀 Demo
+## Demo
 
 🔗 **Live App:** https://biogpt-summarizer-rxqvfymykdg6wo2uz7nkpp.streamlit.app/
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠Tech Stack
 
 - `Python 3.10+`
 - `Streamlit`
