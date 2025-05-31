@@ -1,6 +1,5 @@
 from transformers import pipeline, AutoTokenizer
 import streamlit as st
-import re
 
 @st.cache_resource(show_spinner=False)
 def get_model():
@@ -30,42 +29,59 @@ def split_by_sections(text):
 
     return {k: "\n".join(v).strip() for k, v in sections.items() if v and len(" ".join(v)) > 100}
 
-def summarize_section(title, content, model):
-    try:
-        result = model(content, max_length=200, min_length=60, do_sample=False)
-        summary = result[0]["summary_text"]
-        return f"### {title.capitalize()}\n{summary.strip()}\n"
-    except Exception as e:
-        return f"### {title.capitalize()}\n[Error summarizing this section: {e}]\n"
-
 def generate_final_summary(text):
     tokenizer = get_tokenizer()
     summarizer = get_model()
     sections = split_by_sections(text)
 
-    structured_summary = ""
+    # Try to extract title: first non-empty line
+    title = ""
+    for line in text.splitlines():
+        if line.strip():
+            title = line.strip()
+            break
+
+    structured_summary = "✅ Detailed Summary\n"
+    structured_summary += f"Title:\n{title}\n\n"
+
+    # Map original sections to nicer headings
+    section_name_map = {
+        "abstract": "Background",
+        "background": "Background",
+        "introduction": "Background",
+        "methods": "Study Design and Methodology",
+        "materials and methods": "Study Design and Methodology",
+        "results": "Key Results",
+        "discussion": "Interpretation",
+        "conclusion": "Conclusion",
+        # You can add "objective" or others if needed
+    }
+
     total = len(sections)
     progress = st.progress(0)
 
     for i, (section_title, section_content) in enumerate(sections.items()):
-        # Token-aware chunking for long sections
+        display_title = section_name_map.get(section_title, section_title.capitalize())
+
         tokens = tokenizer(section_content, return_tensors="pt", truncation=False)["input_ids"][0]
         if len(tokens) > 1024:
+            # chunk and summarize each chunk, then combine
             chunks = [tokens[j:j+900] for j in range(0, len(tokens), 900)]
             chunk_texts = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
             combined_summary = " ".join(
                 summarizer(c, max_length=160, min_length=40, do_sample=False)[0]["summary_text"]
                 for c in chunk_texts
             )
-            summary = summarize_section(section_title, combined_summary, summarizer)
+            summary = combined_summary.strip()
         else:
-            summary = summarize_section(section_title, section_content, summarizer)
+            summary = summarizer(section_content, max_length=200, min_length=60, do_sample=False)[0]["summary_text"].strip()
 
-        structured_summary += summary + "\n"
+        structured_summary += f"{display_title}:\n{summary}\n\n"
         progress.progress((i + 1) / total)
 
     progress.empty()
     return structured_summary.strip()
+
 st.caption("⚠️ This structured summary is generated using AI and may omit technical details. Always verify with the full paper before citing.")
 
 
