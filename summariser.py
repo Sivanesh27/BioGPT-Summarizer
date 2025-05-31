@@ -11,7 +11,6 @@ def get_tokenizer():
     return AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
 def clean_text(text):
-    # Remove excessive newlines and whitespace
     return re.sub(r'\n+', '\n', text).strip()
 
 def split_sections(text):
@@ -48,7 +47,6 @@ def summarize_chunk(text, model):
         words = text.split()
         if len(words) > 750:
             text = " ".join(words[:750])
-
         summary = model(text, max_length=150, min_length=80, do_sample=False)[0]['summary_text']
         return summary.strip()
     except Exception as e:
@@ -59,8 +57,11 @@ def generate_final_summary(full_text):
     model = get_model()
 
     sections = split_sections(full_text)
-    full_summary = "### Paper Summary\n\n"
 
+    excluded_sections = {"Keywords", "References", "Footnotes", "Conflict of interest statement"}
+    sections = {k: v for k, v in sections.items() if k.strip() not in excluded_sections}
+
+    full_summary = "### Paper Summary\n\n"
     progress = st.progress(0)
     n_sections = len(sections)
 
@@ -82,7 +83,6 @@ def generate_final_summary(full_text):
             summaries.append(summary)
 
         combined_summary = " ".join(summaries).strip()
-
         if not combined_summary:
             combined_summary = "[No summary could be generated for this section]"
 
