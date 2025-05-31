@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz  # pymupdf
+import pdfplumber
 import requests
 from io import BytesIO
 from summarise import summarize_text
@@ -16,14 +16,24 @@ pdf = None
 full_text = ""
 
 if uploaded_file:
-    source = uploaded_file.read()
-    pdf = fitz.open(stream=source, filetype="pdf")
+    try:
+        with pdfplumber.open(BytesIO(uploaded_file.read())) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    full_text += text
+    except Exception as e:
+        st.error(f"❌ Failed to read PDF: {e}")
 
 elif url and url.endswith(".pdf"):
     try:
         response = requests.get(url)
         if response.status_code == 200:
-            pdf = fitz.open(stream=BytesIO(response.content), filetype="pdf")
+            with pdfplumber.open(BytesIO(response.content)) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        full_text += text
         else:
             st.error("❌ Failed to download PDF. Check the URL.")
     except Exception as e:
@@ -32,11 +42,7 @@ elif url and url.endswith(".pdf"):
 elif url and not url.endswith(".pdf"):
     st.warning("⚠️ Please provide a direct PDF link (ends with .pdf).")
 
-if pdf:
-    with st.spinner("🔍 Extracting text from PDF..."):
-        for page in pdf:
-            full_text += page.get_text()
-
+if full_text:
     st.subheader("📑 Extracted Text Preview")
     st.text_area("First part of the paper:", full_text[:2000], height=300)
 
@@ -47,4 +53,3 @@ if pdf:
             st.success(summary)
 else:
     st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
-
