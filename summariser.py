@@ -1,111 +1,63 @@
-from transformers import pipeline, AutoTokenizer
 import streamlit as st
+import pdfplumber
+import requests
+from io import BytesIO
+from summariser import generate_final_summary
 
-@st.cache_resource(show_spinner=False)
-def get_model():
-    return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
 
-@st.cache_resource(show_spinner=False)
-def get_tokenizer():
-    return AutoTokenizer.from_pretrained("sshleifer/distilbart-cnn-12-6")
+st.title("🧠 BioGPT: Free Research Paper Summarizer")
+st.markdown("Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!")
 
-def split_by_sections(text):
-    """Split paper into main scientific sections with rough matching."""
-    section_titles = [
-        "abstract",
-        "background",
-        "introduction",
-        "methods",
-        "materials and methods",
-        "results",
-        "discussion",
-        "conclusion",
-        "conclusions",
-    ]
-    sections = {}
-    current = "preamble"
-    sections[current] = []
+uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
+url = st.text_input("🌐 Or paste a direct .pdf URL (e.g., from bioRxiv)")
 
-    for line in text.splitlines():
-        clean_line = line.strip().lower()
-        if clean_line in section_titles:
-            current = clean_line
-            sections[current] = []
-        else:
-            sections.setdefault(current, []).append(line.strip())
+full_text = ""
 
-    # Filter sections: keep only those with significant text
-    return {
-        k: "\n".join(v).strip()
-        for k, v in sections.items()
-        if v and len(" ".join(v)) > 100
-    }
-
-def summarize_section(title, content, model, tokenizer):
-    # Truncate content to max 1000 tokens to speed up summarization
-    tokens = tokenizer(content, return_tensors="pt", truncation=True, max_length=1000)[
-        "input_ids"
-    ][0]
-    truncated_text = tokenizer.decode(tokens, skip_special_tokens=True)
-
-    # Use shorter summary lengths to speed up generation
+# Read from uploaded file
+if uploaded_file:
     try:
-        result = model(
-            truncated_text,
-            max_length=120,
-            min_length=40,
-            do_sample=False,
-            truncation=True,
-        )
-        summary = result[0]["summary_text"]
-        return f"**{title.capitalize()}:**\n{summary.strip()}\n"
+        with pdfplumber.open(BytesIO(uploaded_file.read())) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    full_text += text + "\n"
     except Exception as e:
-        return f"**{title.capitalize()}:**\n[Error summarizing this section: {e}]\n"
+        st.error(f"❌ Failed to read PDF: {e}")
 
-def generate_final_summary(text):
-    tokenizer = get_tokenizer()
-    summarizer = get_model()
-    sections = split_by_sections(text)
+# Read from URL
+elif url and url.endswith(".pdf"):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            with pdfplumber.open(BytesIO(response.content)) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        full_text += text + "\n"
+        else:
+            st.error("❌ Failed to download PDF. Check the URL.")
+    except Exception as e:
+        st.error(f"❌ Error downloading PDF: {e}")
 
-    # Extract title as the first non-empty line in the text (usually paper title)
-    title = ""
-    for line in text.splitlines():
-        if line.strip():
-            title = line.strip()
-            break
+elif url and not url.endswith(".pdf"):
+    st.warning("⚠️ Please provide a direct PDF link (ends with .pdf).")
 
-    # Define the sections we want to summarize in detail
-    important_sections = [
-        "abstract",
-        "introduction",
-        "methods",
-        "results",
-        "discussion",
-        "conclusion",
-        "background",
-        "materials and methods",
-        "conclusions",
-    ]
+if full_text.strip():
+    if len(full_text.strip()) < 1000:
+        st.warning("⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting.")
 
-    summary_text = f"# {title}\n\n"
+    st.subheader("📑 Extracted Text Preview")
+    st.text_area("First part of the paper:", full_text[:2000], height=300)
 
-    progress = st.progress(0)
-    total = len(important_sections)
-
-    for i, section in enumerate(important_sections):
-        content = sections.get(section)
-        if content:
-            sec_summary = summarize_section(section, content, summarizer, tokenizer)
-            summary_text += sec_summary + "\n"
-        progress.progress((i + 1) / total)
-
-    progress.empty()
-
-    summary_text += (
-        "⚠️ *This structured summary is AI-generated. Verify with the full paper before citing.*"
-    )
-
-    return summary_text.strip()
+    if st.button("🧠 Summarize"):
+        with st.spinner("Generating summary..."):
+            summary = generate_final_summary(full_text)
+            st.subheader("✅ Detailed Summary")
+            st.markdown(summary)
+            st.caption("⚠️ This is an AI-generated summary. Please verify with the original article before citing.")
+else:
+    st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
 
 
 
