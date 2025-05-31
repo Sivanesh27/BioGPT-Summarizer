@@ -50,7 +50,7 @@ if full_text.strip():
     st.subheader("📑 Extracted Text Preview")
     st.text_area("First part of the paper:", full_text[:2000], height=300)
 
-    if st.button("🧠 Summarize"):
+    if st.button("Summarize"):
         with st.spinner("Generating summary..."):
             summary = generate_final_summary(full_text)
             st.subheader("✅ Detailed Summary")
