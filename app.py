@@ -4,19 +4,17 @@ import requests
 from io import BytesIO
 from summariser import generate_final_summary
 
-# IMPORTANT: set_page_config must be the very first Streamlit command
-st.set_page_config(page_title="BioGPT Fast Summarizer", page_icon="🧠")
+st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
 
-st.title("🧠 BioGPT: Fast Research Paper Summarizer")
-st.markdown(
-    "Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!"
-)
+st.title("🧠 BioGPT: Free Research Paper Summarizer")
+st.markdown("Upload a PDF or paste a direct .pdf link to summarize a biomedical research paper — no API key needed!")
 
 uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
 url = st.text_input("🌐 Or paste a direct .pdf URL (e.g., from bioRxiv)")
 
 full_text = ""
 
+# Read from uploaded file
 if uploaded_file:
     try:
         with pdfplumber.open(BytesIO(uploaded_file.read())) as pdf:
@@ -27,6 +25,7 @@ if uploaded_file:
     except Exception as e:
         st.error(f"❌ Failed to read PDF: {e}")
 
+# Read from URL
 elif url and url.endswith(".pdf"):
     try:
         response = requests.get(url)
@@ -46,20 +45,17 @@ elif url and not url.endswith(".pdf"):
 
 if full_text.strip():
     if len(full_text.strip()) < 1000:
-        st.warning(
-            "⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting."
-        )
+        st.warning("⚠️ The extracted text is very short. This may be due to a scanned PDF or poor formatting.")
 
     st.subheader("📑 Extracted Text Preview")
     st.text_area("First part of the paper:", full_text[:2000], height=300)
 
     if st.button("🧠 Summarize"):
-        with st.spinner("Generating summary... This may take a few seconds."):
+        with st.spinner("Generating summary..."):
             summary = generate_final_summary(full_text)
             st.subheader("✅ Detailed Summary")
             st.markdown(summary)
-            st.caption(
-                "⚠️ This is an AI-generated summary. Please verify with the original article before citing."
-            )
+            st.caption("⚠️ This is an AI-generated summary. Please verify with the original article before citing.")
 else:
     st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
+
