@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import fitz  # pymupdf
 import requests
 from io import BytesIO
 from summarise import summarize_text
