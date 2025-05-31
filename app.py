@@ -2,7 +2,7 @@ import streamlit as st
 import pdfplumber
 import requests
 from io import BytesIO
-from summarise import summarize_text
+from summariser import summarize_text  # updated to match filename
 
 st.set_page_config(page_title="BioGPT Free Summarizer", page_icon="🧠")
 
@@ -53,3 +53,4 @@ if full_text:
             st.success(summary)
 else:
     st.info("Please upload a PDF or paste a direct .pdf URL to begin.")
+
